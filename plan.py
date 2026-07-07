@@ -93,31 +93,68 @@
 
 
 
+# Основные HTTP методы
 
-# @api_view(['GET', 'PUT', 'DELETE'])
-# def student_detail(request, pk):
-#     try:
-#         student = Student.objects.get(pk=pk)
-#     except Student.DoesNotExist:
-#         return Response({'error': 'Not found'}, status=404)
+# 1. GET
 
-#     if request.method == 'GET':
-#         serializer = StudentSerializer(student)
-#         return Response(serializer.data)
-
-#     elif request.method == 'PUT':
-#         serializer = StudentSerializer(student, data=request.data)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data)
-#         return Response(serializer.errors, status=400)
-
-#     elif request.method == 'DELETE':
-#         student.delete()
-#         return Response(status=204)
+# Используется для получения данных с сервера.
+# Безопасный метод: ничего не изменяет в БД.
+# Данные можно передавать через query params (например: ?id=5).
+# Пример: открыть страницу студента. 
+# GET /apartments/
 
 
+# 2. POST
 
+# Используется для создания новых данных (например, новый apartment).
+# Данные передаются в теле запроса (формы или JSON).
+# Не отображаются в адресной строке.
+# Может изменять базу данных. 
+# POST /apartments/create
+
+
+# 3. PUT
+
+# Используется для полного обновления объекта.
+# Обычно в API: заменить весь объект новыми данными.
+# Редко используется в HTML-формах, чаще в REST API.
+# PUT /apartments/5
+
+
+# 4. PATCH
+
+# Используется для частичного обновления объекта (обновить только одно поле).
+# Более гибкий, чем PUT.
+# PATCH /apartments/5
+
+
+# 5. DELETE
+
+# Используется для удаления данных с сервера.
+# Опасный метод: удаляет объект навсегда (если не реализовать "soft delete").
+# DELETE /apartments/5
+
+
+# Additional Methods ------
+
+# 6. HEAD
+
+# Как GET, но возвращает только заголовки, без тела.
+# Используется для проверки доступности ресурса.
+
+
+# 7. OPTIONS
+
+# Запросить у сервера список доступных методов для ресурса.
+# Пример: сервер может ответить, что поддерживает GET, POST, PUT, DELETE.
+
+
+# GET → читать данные
+# POST → создавать новые
+# PUT → полностью обновить
+# PATCH → частично обновить
+# DELETE → удалить
+# HEAD, OPTIONS → служебные
 
 
 
@@ -160,9 +197,59 @@
 #     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0)),
 # ]
 
+# 'swagger/' — адрес страницы. Открыв http://127.0.0.1:8000/api/v1/swagger/,  документацию.
+# schema_view.with_ui('swagger') — говорит: «показать документацию в виде интерфейса Swagger».
+# cache_timeout=0 — отключает кэширование, чтобы документация всегда была свежей 
+# (обновлялась сразу при изменении кода).
 
 
 
+# Что такое Postman?
+# Postman — это программа (инструмент) для тестирования API. 
+# Она позволяет отправлять запросы к серверу и смотреть, 
+# что он отвечает — без написания кода и без браузера.
+
+# Представьте : вы создали REST API, но у вас ещё нет сайта или приложения, которое к нему обращается. 
+# Как проверить, что API работает? Вот тут и нужен Postman — вы вручную отправляете запрос и сразу видите ответ.
+
+# Зачем он нужен?
+# Тестировать API до того, как написан фронтенд
+# Проверять все методы — GET, POST, PUT, DELETE — в одном месте
+# Отправлять данные (JSON, файлы) на сервер и видеть ответ
+# Смотреть коды статусов (200, 404, 500) и время ответа
+# Сохранять запросы в коллекции, чтобы не вводить их заново
+
+
+# Основные вкладки при отправке запроса
+# Params — параметры в адресе (например, фильтры ?search=django).
+# Headers — заголовки запроса. Например, тут указывается формат данных или токен авторизации.
+# Body — тело запроса. Самая важная вкладка для POST и PUT: здесь вы пишете данные, 
+# которые отправляете на сервер. Обычно выбираете режим raw → JSON:
+# json{
+#     "title": "Война и мир",
+#     "pages": 1225,
+#     "author": 3
+# }
+# Authorization — здесь настраивается авторизация, если API защищён (логин, токен).
+
+# Полезное понятие — Collections (Коллекции)
+# Collection — это папка, где вы сохраняете все запросы к одному проекту. Например, коллекция «Электронная библиотека» со всеми запросами к книгам, авторам и жанрам. Это удобно: настроили один раз — пользуетесь всегда.
+
+# Короткое резюме
+
+# Postman — инструмент для ручного тестирования API.
+# Позволяет отправлять запросы (GET, POST, PUT, DELETE) и видеть ответ сервера.
+# Главные части: метод, URL, кнопка Send, вкладка Body (для отправки JSON), окно ответа.
+# Помогает проверить API до того, как написан сайт или приложение.
+
+
+
+# Что такое Model Manager?
+# Model Manager (менеджер модели) — это объект, через который 
+# Django обращается к базе данных. 
+# Когда вы пишете Apartments.objects.all(), вот этот objects — и есть менеджер.
+# Другими словами: менеджер — это «дверь» между вашей моделью и базой данных. 
+# Через него проходят все запросы: получение, фильтрация, создание объектов.
 
 
 
@@ -207,17 +294,30 @@
 
 # from rest_framework import serializers
 
-# class StudentSerializer(serializers.Serializer):
-#     id = serializers.IntegerField(read_only=True)
-#     name = serializers.CharField(max_length=100)
-#     age = serializers.IntegerField()
+from rest_framework import serializers
+# from .models import Apartment, Block
+
+
+# class ApartmentSerializer(serializers.Serializer):
+#     number = serializers.IntegerField()
+#     area = serializers.FloatField()
+#     floor = serializers.IntegerField()
+#     rooms_count = serializers.IntegerField()
+#     deadline = serializers.DateField()
+#     type = serializers.ChoiceField(choices=Apartment.TYPE_CHOICES)
+#     block = serializers.PrimaryKeyRelatedField(queryset=Block.objects.all())
 
 #     def create(self, validated_data):
-#         return Student.objects.create(**validated_data)
+#         return Apartment.objects.create(**validated_data)
 
 #     def update(self, instance, validated_data):
-#         instance.name = validated_data.get('name', instance.name)
-#         instance.age = validated_data.get('age', instance.age)
+#         instance.number = validated_data.get('number', instance.number)
+#         instance.area = validated_data.get('area', instance.area)
+#         instance.floor = validated_data.get('floor', instance.floor)
+#         instance.rooms_count = validated_data.get('rooms_count', instance.rooms_count)
+#         instance.deadline = validated_data.get('deadline', instance.deadline)
+#         instance.type = validated_data.get('type', instance.type)
+#         instance.block = validated_data.get('block', instance.block)
 #         instance.save()
 #         return instance
 
@@ -241,69 +341,3 @@
 #         fields = '__all__'
 
 
-
-
-
-# Основные HTTP методы
-
-# 1. GET
-
-# Используется для получения данных с сервера.
-# Безопасный метод: ничего не изменяет в БД.
-# Данные можно передавать через query params (например: ?id=5).
-# Пример: открыть страницу movies. 
-# GET /movies/
-
-
-# 2. POST
-
-# Используется для создания новых данных (например, новый film).
-# Данные передаются в теле запроса (формы или JSON).
-# Не отображаются в адресной строке.
-# Может изменять базу данных. 
-# POST api/v1/movies/
-
-
-# 3. PUT
-
-# Используется для полного обновления объекта.
-# Обычно в API: заменить весь объект новыми данными.
-# Редко используется в HTML-формах, чаще в REST API.
-# PUT /api/v1/movies/5/
-
-
-
-# 4. PATCH
-
-# Используется для частичного обновления объекта (обновить только одно поле).
-# Более гибкий, чем PUT.
-# PATCH /api/v1/movies/5/
-
-
-# 5. DELETE
-
-# Используется для удаления данных с сервера.
-# Опасный метод: удаляет объект навсегда (если не реализовать "soft delete").
-# DELETE /students/5
-
-
-# Additional Methods ------
-
-# 6. HEAD
-
-# Как GET, но возвращает только заголовки, без тела.
-# Используется для проверки доступности ресурса.
-
-
-# 7. OPTIONS
-
-# Запросить у сервера список доступных методов для ресурса.
-# Пример: сервер может ответить, что поддерживает GET, POST, PUT, DELETE.
-
-
-# GET → читать данные
-# POST → создавать новые
-# PUT → полностью обновить
-# PATCH → частично обновить
-# DELETE → удалить
-# HEAD, OPTIONS → служебные
