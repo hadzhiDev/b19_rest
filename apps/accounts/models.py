@@ -13,7 +13,7 @@ class UserManager(BaseUserManager):
     use_in_migrations = True
 
     def _create_user(self, email, password, **extra_fields):
-        if email is None and not (extra_fields.get("username") or "").startswith("telegram_"):
+        if email is None:
             raise ValueError(_("email must be set"))
         
         user = self.model(email=email, **extra_fields)

@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class EstateConfig(AppConfig):
-    name = 'estate'
+class AccountsConfig(AppConfig):
+    name = 'apps.accounts'
