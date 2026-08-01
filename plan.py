@@ -357,3 +357,331 @@ from rest_framework import serializers
 # Каждый пользователь получает один фиксированный токен, который хранится в таблице БД (authtoken_token), привязанный к его user id.
 # Клиент отправляет его так: Authorization: Token <токен>
 # По умолчанию токен не истекает, это не JWT — просто случайная строка, по которой DRF ищет пользователя в базе.
+
+
+
+# Generic views — это готовые классы, которые уже содержат типовую логику CRUD.
+# Ты просто указываешь:
+#  • какой queryset
+#  • какой сериализатор
+#  • какие пермишены
+
+# И всё — DRF сам делает остальное.
+
+# Generic views = меньше кода, меньше ошибок, быстрее разработка.
+
+# Пример с ListCreateAPIView:
+
+
+# class StudentListCreateView(ListCreateAPIView):
+#     queryset = Product.objects.all()
+#     serializer_class = ProductSerializer
+
+
+
+
+# Что такое ViewSet в DRF
+
+# ViewSet — это класс, который объединяет сразу несколько действий 
+# (list, retrieve, create, update, delete) в одном месте.
+
+
+
+# Что такое Router
+
+# Router — это автоматический генератор URL-ов для ViewSet-ов.
+
+
+
+
+# Inlines
+# Paginations in ViewSets
+# Filters in ViewSets
+# Permissions in ViewSets
+
+
+
+
+
+
+
+# DRF: Пагинация и Фильтрация
+
+## 1. Зачем это нужно
+
+# Отсюда два инструмента:
+
+# - **Пагинация** — отвечаем не всем набором, а «страницей» (куском).
+# - **Фильтрация** — отдаём только те объекты, которые подходят под условия из query-параметров.
+
+# Порядок работы в DRF всегда такой:
+
+# ```
+# get_queryset() → filter_queryset() → paginate_queryset() → serializer
+# ```
+
+# Сначала фильтруем, потом режем на страницы. Это важно: пагинация применяется уже к отфильтрованному набору.
+
+# ---
+
+# ## 2. Пагинация
+
+# Пагинация работает **только в `ListAPIView` / `ListModelMixin`** (то есть в `list`-экшене). Для `retrieve`, `create` и т.д. она не применяется.
+
+# ### Глобальная настройка
+
+# REST_FRAMEWORK = {
+#     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+#     'PAGE_SIZE': 20,
+# }
+
+
+# Важный нюанс: если указать только `DEFAULT_PAGINATION_CLASS` без `PAGE_SIZE`, пагинация **не заработает**.
+
+#  2.1 PageNumberPagination
+
+
+# from rest_framework.pagination import PageNumberPagination
+
+# class ProductPagination(PageNumberPagination):
+#     page_size = 20
+#     page_size_query_param = 'page_size'  # клиент может менять размер: ?page_size=50
+#     max_page_size = 100                  # но не больше 100
+#     page_query_param = 'page'
+
+
+# Запрос: `/api/products/?page=3&page_size=50`
+
+# Ответ:
+
+# json
+# {
+#   "count": 500,
+#   "next": "http://api.../products/?page=4",
+#   "previous": "http://api.../products/?page=2",
+#   "results": [ ... ]
+# }
+# 
+
+# Под капотом: `LIMIT 50 OFFSET 100`.
+
+
+
+
+# ### 2.2 LimitOffsetPagination
+
+# Клиент сам управляет окном.
+
+# class ProductPagination(LimitOffsetPagination):
+#     default_limit = 20
+#     max_limit = 100
+
+# Запрос: `/api/products/?limit=20&offset=40`
+
+# Формат ответа тот же (`count / next / previous / results`).
+
+
+# ### 2.3 CursorPagination
+
+# Самая «правильная» для больших и живых данных. Вместо номера страницы клиент получает непрозрачный курсор — закодированную позицию в наборе.
+
+# ```python
+# class ProductPagination(CursorPagination):
+#     page_size = 20
+#     ordering = '-created_at'  # обязательно! поле должно быть уникальным/неизменяемым
+# ```
+
+# Запрос: `/api/products/?cursor=cD0yMDI2LTA4LTAx`
+
+# Ответ: только `next`, `previous`, `results` — **без `count`**.
+
+# - ➕ Стабильная производительность независимо от глубины (использует `WHERE created_at < ...`, а не `OFFSET`). Нет «проблемы сдвига»: если во время просмотра добавили новые записи, при offset-пагинации ты увидишь один и тот же объект дважды или пропустишь его — с курсором такого нет.
+# - ➖ Нельзя прыгнуть на страницу №7, нет общего количества.
+
+# **Практическое правило:** ленты, чаты, логи, бесконечный скролл → Cursor. Админки и каталоги с номерами страниц → PageNumber.
+
+# ### Применение к конкретной вьюхе
+
+# ```python
+# class ProductListView(ListAPIView):
+#     queryset = Product.objects.all()
+#     serializer_class = ProductSerializer
+#     pagination_class = ProductPagination  # или None, чтобы отключить
+# ```
+
+# ### Кастомный формат ответа
+
+# ```python
+# class CustomPagination(PageNumberPagination):
+#     page_size = 20
+
+#     def get_paginated_response(self, data):
+#         return Response({
+#             'total': self.page.paginator.count,
+#             'page': self.page.number,
+#             'pages': self.page.paginator.num_pages,
+#             'results': data,
+#         })
+# ```
+
+# ---
+
+# ## 3. Фильтрация
+
+# Фильтр в DRF — это класс с методом `filter_queryset(self, request, queryset, view)`, который возвращает новый queryset. Их можно комбинировать: они применяются цепочкой, по очереди.
+
+# ```python
+# REST_FRAMEWORK = {
+#     'DEFAULT_FILTER_BACKENDS': [
+#         'django_filters.rest_framework.DjangoFilterBackend',
+#         'rest_framework.filters.SearchFilter',
+#         'rest_framework.filters.OrderingFilter',
+#     ]
+# }
+# ```
+
+# ### 3.1 Самый простой способ — переопределить `get_queryset()`
+
+# ```python
+# class ProductListView(ListAPIView):
+#     serializer_class = ProductSerializer
+
+#     def get_queryset(self):
+#         qs = Product.objects.all()
+#         category = self.request.query_params.get('category')
+#         if category:
+#             qs = qs.filter(category__slug=category)
+#         return qs
+# ```
+
+# Работает, но при 5–10 параметрах превращается в лапшу из `if`. Отсюда — бэкенды фильтрации.
+
+# ### 3.2 SearchFilter — текстовый поиск
+
+# ```python
+# from rest_framework.filters import SearchFilter
+
+# class ProductListView(ListAPIView):
+#     filter_backends = [SearchFilter]
+#     search_fields = ['name', 'description', 'category__name']
+# ```
+
+# Запрос: `?search=ноутбук` → ищет по всем перечисленным полям через `OR` с `icontains`.
+
+# Префиксы в `search_fields` меняют поведение:
+
+# | Префикс | Значение |
+# |---|---|
+# | `'name'` | `icontains` (по умолчанию) |
+# | `'^name'` | `istartswith` — начинается с |
+# | `'=name'` | `iexact` — точное совпадение |
+# | `'@name'` | полнотекстовый поиск (только PostgreSQL) |
+# | `'$name'` | regex |
+
+# ### 3.3 OrderingFilter — сортировка
+
+# ```python
+# from rest_framework.filters import OrderingFilter
+
+# class ProductListView(ListAPIView):
+#     filter_backends = [OrderingFilter]
+#     ordering_fields = ['price', 'created_at', 'name']  # что разрешено
+#     ordering = ['-created_at']                          # по умолчанию
+# ```
+
+# Запрос: `?ordering=-price` (минус = по убыванию), можно несколько: `?ordering=category,-price`.
+
+# Важно: указывай `ordering_fields` явно. Если поставить `'__all__'`, клиент сможет сортировать по любому полю, включая тяжёлые для БД.
+
+# ### 3.4 django-filter — основной инструмент
+
+# Устанавливаем: `pip install django-filter`, добавляем `'django_filters'` в `INSTALLED_APPS`.
+
+# Простой вариант — просто перечислить поля:
+
+# ```python
+# from django_filters.rest_framework import DjangoFilterBackend
+
+# class ProductListView(ListAPIView):
+#     filter_backends = [DjangoFilterBackend]
+#     filterset_fields = ['category', 'in_stock', 'brand']
+# ```
+
+# Запрос: `?category=3&in_stock=true`
+
+# Продвинутый вариант — свой `FilterSet` с диапазонами и кастомной логикой:
+
+# ```python
+# import django_filters
+
+# class ProductFilter(django_filters.FilterSet):
+#     min_price = django_filters.NumberFilter(field_name='price', lookup_expr='gte')
+#     max_price = django_filters.NumberFilter(field_name='price', lookup_expr='lte')
+#     created_after = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
+#     name = django_filters.CharFilter(lookup_expr='icontains')
+
+#     class Meta:
+#         model = Product
+#         fields = ['category', 'brand', 'in_stock']
+
+
+# class ProductListView(ListAPIView):
+#     filter_backends = [DjangoFilterBackend]
+#     filterset_class = ProductFilter
+# ```
+
+# Запрос: `?min_price=1000&max_price=5000&category=3&created_after=2026-01-01`
+
+# Дополнительно бывает `ModelMultipleChoiceFilter` (несколько значений: `?tags=1&tags=2`), `BooleanFilter`, и метод-фильтры:
+
+# ```python
+#     is_discounted = django_filters.BooleanFilter(method='filter_discounted')
+
+#     def filter_discounted(self, queryset, name, value):
+#         return queryset.filter(old_price__isnull=not value)
+# ```
+
+# ---
+
+# ## 4. Всё вместе
+
+# ```python
+# class ProductListView(ListAPIView):
+#     queryset = Product.objects.select_related('category').all()
+#     serializer_class = ProductSerializer
+#     pagination_class = ProductPagination
+#     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+#     filterset_class = ProductFilter
+#     search_fields = ['name', 'description']
+#     ordering_fields = ['price', 'created_at']
+#     ordering = ['-created_at']
+# ```
+
+# Запрос:
+
+# ```
+# /api/products/?search=ноутбук&min_price=1000&ordering=-price&page=2&page_size=20
+# ```
+
+# Порядок выполнения: базовый queryset → django-filter → поиск → сортировка → пагинация → сериализация.
+
+# ---
+
+# ## 5. На что обратить внимание (частые ошибки)
+
+# 1. **Нет сортировки — нестабильная пагинация.** Если queryset не отсортирован, БД может вернуть строки в разном порядке, и на второй странице появятся дубли. Всегда задавай `ordering` или `Meta.ordering` в модели.
+# 2. **N+1 запросов.** Пагинация не спасает от N+1: 20 объектов × запрос на каждую связь = 21 запрос. Используй `select_related` / `prefetch_related`.
+# 3. **`COUNT(*)` на больших таблицах** — реальная причина медленных ответов. Если таблица огромная, переходи на `CursorPagination`.
+# 4. **Не ограничил `max_page_size`** — клиент запросит `?page_size=1000000` и положит сервер.
+# 5. **Фильтровать нужно в БД, а не в Python.** `[p for p in Product.objects.all() if p.price > 100]` вытянет всю таблицу в память.
+# 6. **Пагинация не работает в `retrieve`/`create`** — только в списковых экшенах.
+
+# ---
+
+# ## 6. Вопросы для проверки понимания
+
+# 1. Почему `CursorPagination` не возвращает `count`?
+# 2. Что произойдёт, если во время листания страниц кто-то добавит новую запись в начало списка — при `PageNumberPagination` и при `CursorPagination`?
+# 3. Что раньше выполняется — фильтрация или пагинация, и почему это важно?
+# 4. Чем `SearchFilter` отличается от `django-filter`? Когда что выбирать?
+# 5. Зачем нужен `max_page_size`?

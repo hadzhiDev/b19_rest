@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Apartment, Block
+from .models import Apartment, Block, Object
 
 
 class ApartmentModelSerializer(serializers.ModelSerializer):
@@ -34,8 +34,13 @@ class ApartmentSerializer(serializers.Serializer):
         return instance
 
 
-# class LoginSerializer(serializers.Serializer):
-#     phone_number = serializers.CharField()
-#     password = serializers.CharField()
+class BlockModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Block
+        fields = "__all__"
 
 
+class ObjectModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Object
+        fields = "__all__"

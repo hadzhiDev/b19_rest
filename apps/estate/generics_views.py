@@ -21,11 +21,11 @@ from .serializers import ApartmentModelSerializer
 #     return Response(serializer.data)
 
 
-class ApartmentListCreateView(ListCreateAPIView):
-    serializer_class = ApartmentModelSerializer
-    queryset = Apartment.objects.all()
+# class ApartmentListCreateView(ListCreateAPIView):
+#     serializer_class = ApartmentModelSerializer
+#     queryset = Apartment.objects.all()
 
 
-class ApartmentRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
-    serializer_class = ApartmentModelSerializer
-    queryset = Apartment.objects.all()
+# class ApartmentRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
+#     serializer_class = ApartmentModelSerializer
+#     queryset = Apartment.objects.all()
