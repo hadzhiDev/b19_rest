@@ -1,13 +1,16 @@
 from django.shortcuts import render
 
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated, IsAuthenticatedOrReadOnly
+
 
 from .models import Apartment, Object, Block
 from .serializers import ApartmentSerializer
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def apartments_list(request):
     apartments = Apartment.objects.all()
     serializer = ApartmentSerializer(apartments, many=True) 
@@ -15,6 +18,7 @@ def apartments_list(request):
 
 
 @api_view(['POST'])
+@permission_classes([IsAdminUser])
 def apartment_create(request):
     serializer = ApartmentSerializer(data=request.data)
     if serializer.is_valid():
@@ -24,6 +28,7 @@ def apartment_create(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def apartment_detail(request, pk):
     apartment = Apartment.objects.get(pk=pk)
     serializer = ApartmentSerializer(apartment)
@@ -31,6 +36,7 @@ def apartment_detail(request, pk):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAdminUser])
 def apartment_put(request, pk):
     apartment = Apartment.objects.get(pk=pk)
     serializer = ApartmentSerializer(data=request.data, instance=apartment)
@@ -41,6 +47,7 @@ def apartment_put(request, pk):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAdminUser])
 def apartment_delete(request, pk):
     apartment = Apartment.objects.get(pk=pk)
     apartment.delete()
