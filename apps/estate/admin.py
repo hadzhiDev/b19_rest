@@ -5,7 +5,7 @@ from .models import Apartment, Block, Object
 
 @admin.register(Apartment)
 class ApartmentAdmin(admin.ModelAdmin):
-    list_display = ("number", "area", "floor", "rooms_count", "deadline", "type")
+    list_display = ("number", "area", "floor", "rooms_count", "deadline", "type", "block__number")
     list_filter = ("type", "floor")
     search_fields = ("number",)
 

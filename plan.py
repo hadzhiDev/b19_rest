@@ -685,3 +685,174 @@ from rest_framework import serializers
 # 3. Что раньше выполняется — фильтрация или пагинация, и почему это важно?
 # 4. Чем `SearchFilter` отличается от `django-filter`? Когда что выбирать?
 # 5. Зачем нужен `max_page_size`?
+
+
+
+# Статус-код — первое, что читает клиент: по нему фронтенд решает, показать данные, 
+# показать ошибку или отправить на логин. Это часть контракта API, 
+# а не украшение — 200 OK с телом {"error": "..."} это баг, 
+# потому что if (response.ok) на клиенте посчитает такой ответ успешным.
+
+# Пять классов: 
+# 1xx — информационные (почти не встречаются), 
+# 2xx — успех, 
+# 3xx — редирект, 
+# 4xx — ошибка клиента, 
+# 5xx — ошибка сервера. Мнемоника: 4xx — «ты накосячил», 5xx — «я накосячил».
+
+# В DRF не пишем магические числа — есть именованные константы: 
+# Response(data, status=status.HTTP_201_CREATED). 
+# Часть кодов DRF ставит сам (create → 201, destroy → 204, невалидный сериализатор → 400), 
+# остальные поднимаем через исключения: raise NotFound(...), 
+# raise PermissionDenied(...), raise ValidationError(...).
+
+
+# 1. 200 HTTP_200_OK - Запрос успешен, в теле — данные. Дефолт для `GET`, `PUT`, `PATCH`.
+# 2. 201 HTTP_201_CREATED - Ресурс **создан**. Ответ на успешный `POST`. В теле — созданный объект, в заголовке `Location` — ссылка на него.
+# 3. 202 HTTP_202_ACCEPTED - Запрос принят, но обработается **позже** (Celery-задача, отправка письма, генерация отчёта). Результата ещё нет.
+# 4. 204 HTTP_204_NO_CONTENT - Успех, но **тела нет**. Дефолт для `DELETE`. Клиент не должен парсить JSON.
+# 5. 301 HTTP_301_MOVED_PERMANENTLY - Ресурс переехал **навсегда**. Браузеры кэшируют — откатить сложно.
+# 6. 302 HTTP_302_FOUND - Временное перенаправление. Классический редирект после логина.
+# 7. 304 HTTP_304_NOT_MODIFIED - Данные не менялись с прошлого запроса (`ETag` / `If-Modified-Since`). Тела нет — экономим трафик.
+# 8. 400 HTTP_400_BAD_REQUEST - Невалидные данные: не прошла валидация сериализатора, битый JSON, неверный формат поля. Самый частый код ошибки в DRF.
+# 9. 401 HTTP_401_UNAUTHORIZED - **Не аутентифицирован**: токена нет, протух или неверный. Смысл: «я не знаю, кто ты».
+# 10. 403 HTTP_403_FORBIDDEN - **Нет прав**: кто ты — знаю, но делать это тебе нельзя. Чужой объект, не та роль.
+# 11. 404 HTTP_404_NOT_FOUND - Ресурса не существует (или мы намеренно скрываем факт его существования).
+# 12. 405 HTTP_405_METHOD_NOT_ALLOWED - Метод не поддерживается эндпоинтом: `DELETE` на `ListAPIView`.
+# 13. 406 HTTP_406_NOT_ACCEPTABLE - Клиент просит в `Accept` формат, который мы не умеем отдавать (XML, а у нас только JSON).
+# 14. 408 HTTP_408_REQUEST_TIMEOUT - Клиент слишком долго слал запрос — сервер устал ждать.
+# 15. 409 HTTP_409_CONFLICT - Конфликт состояния: дубликат по `unique`, изменение устаревшей версии записи, повторная бронь.
+# 16. 410 HTTP_410_GONE - Ресурс существовал, но **удалён навсегда**. В отличие от 404 — осознанное «было и больше не будет».
+# 17. 413 HTTP_413_REQUEST_ENTITY_TOO_LARGE - Тело запроса слишком большое — обычно загрузка файла сверх лимита.
+# 18. 415 HTTP_415_UNSUPPORTED_MEDIA_TYPE - Неподдерживаемый `Content-Type`: прислали `text/xml`, а парсер ждёт `application/json`.
+# 19. 422 HTTP_422_UNPROCESSABLE_ENTITY - Синтаксис верный, семантика нет (дата окончания раньше начала). DRF по умолчанию отдаёт `400`, но многие API разделяют: 400 — формат, 422 — бизнес-логика.
+# 20. 429 HTTP_429_TOO_MANY_REQUESTS - Превышен лимит запросов. Отдаёт DRF-троттлинг вместе с заголовком `Retry-After`.
+# 21. 500 HTTP_500_INTERNAL_SERVER_ERROR - Необработанное исключение в нашем коде. Вручную не отдаём — это сигнал «мы сломались».
+# 22. 502 HTTP_502_BAD_GATEWAY - Nginx/прокси не достучался до приложения или получил битый ответ (упал gunicorn).
+# 23. 503 HTTP_503_SERVICE_UNAVAILABLE - Сервис временно недоступен: деплой, перегрузка, режим обслуживания.
+# 24. 504 HTTP_504_GATEWAY_TIMEOUT - Прокси дождался таймаута — приложение не ответило вовремя (тяжёлый запрос в БД, зависший внешний API).
+
+
+
+
+
+
+
+
+# Что такое Permission
+
+# Permission — это проверка, может ли конкретный пользователь выполнить конкретное действие (запрос) к API. 
+# Это происходит после аутентификации (DRF сначала узнаёт, кто ты — через Token/JWT/Session, 
+#                                      а потом проверяет — можно ли тебе).
+
+# Разница: Authentication отвечает "кто ты?", Permission отвечает "можно ли тебе это делать?".
+
+# Где подключается
+
+# Глобально в settings.py:
+
+
+# REST_FRAMEWORK = {
+#     'DEFAULT_PERMISSION_CLASSES': [
+#         'rest_framework.permissions.IsAuthenticated',
+#     ]
+# }
+
+# Или на уровне конкретного view:
+
+# python
+# class MyView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+# Встроенные классы permissions
+
+# AllowAny — доступ разрешён всем, даже неавторизованным.
+# IsAuthenticated — доступ только для залогиненных пользователей.
+# IsAdminUser — доступ только для is_staff=True.
+# IsAuthenticatedOrReadOnly — неавторизованные могут только читать (GET), 
+# изменять могут только авторизованные.
+# DjangoModelPermissions — использует стандартные Django-права (add/change/delete/view) на модели.
+
+# Кастомный Permission
+
+# Показать, как написать свой класс:
+
+# python
+# from rest_framework.permissions import BasePermission
+
+# class IsOwner(BasePermission):
+#     def has_object_permission(self, request, view, obj):
+#         return obj.author == request.user
+
+# Два ключевых метода:
+
+# has_permission(self, request, view) — проверка на уровне списка/запроса в целом (до получения объекта).
+# has_object_permission(self, request, view, obj) — проверка на уровне конкретного объекта 
+# (работает только если view вызывает self.check_object_permissions(), обычно это retrieve, update, destroy).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Что такое фильтрация в DRF
+
+# Фильтрация позволяет клиенту сузить список объектов через query-параметры в URL, например:
+# GET /api/v1/apartments/?block__number=7&floors_count=3
+
+# Без фильтров ListAPIView просто отдаёт queryset целиком (или через пагинацию). Фильтры добавляют логику "показать только то, что подходит под условия запроса".
+
+# Backend фильтрации
+
+# DRF использует систему filter_backends — список классов, которые применяются к queryset по очереди.
+
+# python
+# REST_FRAMEWORK = {
+#     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
+# }
+
+# Нужен пакет django-filter:
+
+# pip install django-filter
+
+# 1. Простая фильтрация по полям (django-filter)
+
+# python
+# from django_filters.rest_framework import DjangoFilterBackend
+
+# class ProductListView(generics.ListAPIView):
+#     queryset = Product.objects.all()
+#     serializer_class = ProductSerializer
+#     filter_backends = [DjangoFilterBackend]
+#     filterset_fields = ['category', 'in_stock']
+
+# Теперь работает: ?category=shoes&in_stock=true
+
+# 2. Кастомный FilterSet (гибче, с диапазонами)
+
+# python
+# import django_filters
+
+# class ProductFilter(django_filters.FilterSet):
+#     price_min = django_filters.NumberFilter(field_name='price', lookup_expr='gte')
+#     price_max = django_filters.NumberFilter(field_name='price', lookup_expr='lte')
+#     name = django_filters.CharFilter(field_name='name', lookup_expr='icontains')
+
+#     class Meta:
+#         model = Product
+#         fields = ['category', 'price_min', 'price_max', 'name']
+
+
+# class ProductListView(generics.ListAPIView):
+#     queryset = Product.objects.all()
+#     serializer_class = ProductSerializer
+#     filter_backends = [DjangoFilterBackend]
+#     filterset_class = ProductFilter
